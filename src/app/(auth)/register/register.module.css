@@ -1,0 +1,23 @@
+.successBox {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  background: #f0faf8;
+  border-left: 2px solid #00a79d;
+  border-radius: 2px;
+  margin-bottom: 1.5rem;
+  animation: shakeIn 0.4s ease;
+}
+
+@keyframes shakeIn {
+  0%   { transform: translateX(-8px); opacity: 0; }
+  60%  { transform: translateX(4px); }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+.successText {
+  font-size: 0.75rem;
+  color: #0f766e;
+  letter-spacing: 0.01em;
+}

@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+body {
+  background-color: #f4f7f6;
+  color: #1f2933;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+}
+
+#logo_path_1 {
+  fill: #3a241950;
+  stroke: #3a2419;
+  stroke-width: 1;
+  stroke-dasharray: 2714.419189453125;
+  stroke-dashoffset: 2714.419189453125;
+  animation: logo_path_1 6s ease forwards;
+}
+
+@keyframes logo_path_1 {
+  from {
+    stroke-dashoffset: 2714.419189453125;
+    fill: #3a241950;
+  }
+  to {
+    stroke-dashoffset: 0;
+    fill: #3a2419;
+  }
+}
+
+#logo_path_2 {
+  fill: #00a79d50;
+  stroke: #3a2419;
+  stroke-width: 1;
+  stroke-dasharray: 1595.1280517578125;
+  stroke-dashoffset: 1595.1280517578125;
+  animation: logo_path_2 4s ease forwards;
+}
+
+@keyframes logo_path_2 {
+  from {
+    stroke-dashoffset: 1595.1280517578125;
+    fill: #00a79d50;
+  }
+  to {
+    stroke-dashoffset: 0;
+    fill: #00a79d;
+  }
+}
