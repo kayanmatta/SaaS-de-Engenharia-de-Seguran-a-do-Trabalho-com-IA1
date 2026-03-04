@@ -6,10 +6,10 @@ import { createClient } from "@supabase/supabase-js"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // chave de serviço (não a pública)
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Chave secreta de serviço
 )
 
-// GET — lista documentos da empresa
+// GET — lista documentos com URLs seguras (Signed URLs)
 export async function GET() {
   const session = await getServerSession(authOptions)
 
@@ -25,14 +25,32 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     })
 
-    return NextResponse.json(documents)
+    // Gera uma URL assinada para cada documento
+    // Isso resolve o erro 404 e garante que o link funcione por 1 hora
+const docsWithSecureLinks = await Promise.all(
+  documents.map(async (doc) => {
+    // Adicionamos uma verificação simples antes de pedir a URL
+    if (!doc.fileUrl) return doc;
+
+    const { data } = await supabase.storage
+      .from("documents")
+      .createSignedUrl(doc.fileUrl, 3600) // 3600 segundos = 1 hora
+
+    return {
+      ...doc,
+      fileUrl: data?.signedUrl || null,
+    }
+  })
+)
+
+    return NextResponse.json(docsWithSecureLinks)
   } catch (e) {
     console.error(e)
     return NextResponse.json({ error: "Erro ao buscar documentos." }, { status: 500 })
   }
 }
 
-// POST — faz upload do arquivo e cadastra o documento
+// POST — faz upload e salva o CAMINHO do arquivo
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
 
@@ -44,45 +62,33 @@ export async function POST(req: NextRequest) {
 
   try {
     const formData = await req.formData()
-
-    const file      = formData.get("file") as File
-    const title     = formData.get("title") as string
-    const type      = formData.get("type") as string
+    const file = formData.get("file") as File
+    const title = formData.get("title") as string
+    const type = formData.get("type") as string
     const expiresAt = formData.get("expiresAt") as string
 
-    if (!file || !title || !type) {
-      return NextResponse.json({ error: "Arquivo, título e tipo são obrigatórios." }, { status: 400 })
+    // 1. Gerar nome e caminho únicos
+    const fileExtension = file.name.split('.').pop()
+    const fileName = `${crypto.randomUUID()}.${fileExtension}`
+    const filePath = `${companyId}/${fileName}` // Pasta da empresa/UUID.pdf
+
+    // 2. Upload para o Supabase Storage
+    const { error: storageError } = await supabase.storage
+      .from("documents")
+      .upload(filePath, file)
+
+    if (storageError) {
+      console.error("Storage Error:", storageError)
+      return NextResponse.json({ error: "Erro no upload do arquivo" }, { status: 500 })
     }
 
-    // Faz upload para o Supabase Storage
-    const fileExt  = file.name.split(".").pop()
-    const fileName = `${companyId}/${Date.now()}.${fileExt}`
-    const buffer   = Buffer.from(await file.arrayBuffer())
-
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(fileName, buffer, {
-        contentType: file.type,
-        upsert: false,
-      })
-
-    if (uploadError) {
-      console.error(uploadError)
-      return NextResponse.json({ error: "Erro ao fazer upload do arquivo." }, { status: 500 })
-    }
-
-    // Gera URL pública do arquivo
-    const { data: urlData } = supabase.storage
-      .from("documents")
-      .getPublicUrl(fileName)
-
-    // Salva no banco
+    // 3. Salva no banco o filePath (caminho) e não a URL pública
     const document = await prisma.document.create({
       data: {
         title,
         type: type as any,
         status: "PENDENTE",
-        fileUrl: urlData.publicUrl,
+        fileUrl: filePath, // IMPORTANTE: salvamos o caminho para gerar SignedURLs no GET
         fileName: file.name,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         companyId,
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(document, { status: 201 })
   } catch (e) {
-    console.error(e)
+    console.error("Server Error:", e)
     return NextResponse.json({ error: "Erro ao cadastrar documento." }, { status: 500 })
   }
 }
