@@ -4,6 +4,7 @@ import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useCallback } from "react"
 import styles from "./dashboard.module.css"
+import DocumentsSection from "./DocumentsSection"
 
 const NAV_ITEMS = [
   { id: "overview",  label: "Visão Geral",    icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -224,20 +225,7 @@ export default function DashboardPage() {
           )}
 
           {/* DOCUMENTOS */}
-          {activeNav === "documents" && (
-            <div className={styles.tableCard}>
-              <div className={styles.tableHeader}>
-                <h2 className={styles.tableTitle}>Todos os Documentos</h2>
-                <button className={styles.newDocBtn}>+ Novo Documento</button>
-              </div>
-              <div className={styles.emptyState}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p>Nenhum documento cadastrado ainda.</p>
-              </div>
-            </div>
-          )}
+          {activeNav === "documents" && <DocumentsSection />}
 
           {/* FUNCIONÁRIOS */}
           {activeNav === "employees" && (
