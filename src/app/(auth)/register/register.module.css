@@ -21,3 +21,30 @@
   color: #0f766e;
   letter-spacing: 0.01em;
 }
+
+/* Campo empresa fixo (somente leitura) */
+.companyField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.companyValue {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1.5px solid #e0d5cc;
+  color: #3a2419;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: transparent;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.companyValue svg {
+  color: #00a79d;
+  flex-shrink: 0;
+}
