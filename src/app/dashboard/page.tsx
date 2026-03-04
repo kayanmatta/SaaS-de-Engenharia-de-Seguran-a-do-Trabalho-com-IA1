@@ -2,7 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import styles from "./dashboard.module.css"
 
 const NAV_ITEMS = [
@@ -13,11 +13,70 @@ const NAV_ITEMS = [
   { id: "reports",   label: "Relatórios",     icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
 ]
 
+type Employee = {
+  id: string
+  email: string
+  name: string | null
+  role: string
+  createdAt: string
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  SUPERADMIN: "Super Admin",
+  ADMIN: "Administrador",
+  USER: "Funcionário",
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [activeNav, setActiveNav] = useState("overview")
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Employees state
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [loadingEmployees, setLoadingEmployees] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [employeeError, setEmployeeError] = useState("")
+
+  const fetchEmployees = useCallback(async () => {
+    setLoadingEmployees(true)
+    setEmployeeError("")
+    try {
+      const res = await fetch("/api/employees")
+      if (!res.ok) throw new Error("Erro ao buscar funcionários.")
+      const data = await res.json()
+      setEmployees(data)
+    } catch {
+      setEmployeeError("Não foi possível carregar os funcionários.")
+    } finally {
+      setLoadingEmployees(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeNav === "employees" || activeNav === "overview") {
+      fetchEmployees()
+    }
+  }, [activeNav, fetchEmployees])
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Tem certeza que deseja remover este usuário?")) return
+    setDeletingId(id)
+    try {
+      const res = await fetch("/api/employees", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      if (!res.ok) throw new Error()
+      setEmployees(prev => prev.filter(e => e.id !== id))
+    } catch {
+      alert("Erro ao remover usuário.")
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   if (status === "loading") return (
     <div className={styles.loadingScreen}>
@@ -130,10 +189,10 @@ export default function DashboardPage() {
 
               <div className={styles.metricsGrid}>
                 {[
-                  { label: "Documentos Concluídos", color: "Green",  icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
-                  { label: "Em Análise",             color: "Yellow", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
-                  { label: "Pendentes",              color: "Orange", icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" },
-                  { label: "Vencidos",               color: "Red",    icon: "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" },
+                  { label: "Documentos Concluídos", color: "Green",  icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z", value: "—" },
+                  { label: "Em Análise",             color: "Yellow", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",     value: "—" },
+                  { label: "Pendentes",              color: "Orange", icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z", value: "—" },
+                  { label: "Funcionários",           color: "Teal",   icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z", value: loadingEmployees ? "..." : employees.length },
                 ].map(m => (
                   <div key={m.label} className={`${styles.metricCard} ${styles[`metric${m.color}`]}`}>
                     <div className={styles.metricIcon}>
@@ -141,7 +200,7 @@ export default function DashboardPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" d={m.icon} />
                       </svg>
                     </div>
-                    <div className={styles.metricValue}>—</div>
+                    <div className={styles.metricValue}>{m.value}</div>
                     <div className={styles.metricLabel}>{m.label}</div>
                   </div>
                 ))}
@@ -185,14 +244,82 @@ export default function DashboardPage() {
             <div className={styles.tableCard}>
               <div className={styles.tableHeader}>
                 <h2 className={styles.tableTitle}>Funcionários</h2>
-                <button className={styles.newDocBtn} onClick={() => router.push("/register")}>+ Cadastrar</button>
+                <button className={styles.newDocBtn} onClick={() => router.push("/register")}>
+                  + Cadastrar
+                </button>
               </div>
-              <div className={styles.emptyState}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <p>Nenhum funcionário cadastrado ainda.</p>
-              </div>
+
+              {employeeError && (
+                <div className={styles.errorBanner}>{employeeError}</div>
+              )}
+
+              {loadingEmployees ? (
+                <div className={styles.emptyState}>
+                  <div className={styles.loadingSpinner} />
+                  <p>Carregando funcionários...</p>
+                </div>
+              ) : employees.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <p>Nenhum funcionário cadastrado ainda.</p>
+                </div>
+              ) : (
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Nome / E-mail</th>
+                      <th>Cargo</th>
+                      <th>Cadastrado em</th>
+                      {isAdmin && <th>Ações</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.map(emp => (
+                      <tr key={emp.id}>
+                        <td>
+                          <div className={styles.employeeCell}>
+                            <div className={styles.employeeAvatar}>
+                              {emp.email[0].toUpperCase()}
+                            </div>
+                            <div>
+                              <div className={styles.employeeName}>
+                                {emp.name ?? "—"}
+                              </div>
+                              <div className={styles.employeeEmail}>{emp.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`${styles.roleBadge} ${styles[`role${emp.role}`]}`}>
+                            {ROLE_LABEL[emp.role] ?? emp.role}
+                          </span>
+                        </td>
+                        <td className={styles.docDate}>
+                          {new Date(emp.createdAt).toLocaleDateString("pt-BR")}
+                        </td>
+                        {isAdmin && (
+                          <td>
+                            <button
+                              className={styles.deleteBtn}
+                              onClick={() => handleDelete(emp.id)}
+                              disabled={deletingId === emp.id || emp.id === user?.id}
+                              title={emp.id === user?.id ? "Você não pode remover a si mesmo" : "Remover usuário"}
+                            >
+                              {deletingId === emp.id ? "..." : (
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="15" height="15">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              )}
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
 
