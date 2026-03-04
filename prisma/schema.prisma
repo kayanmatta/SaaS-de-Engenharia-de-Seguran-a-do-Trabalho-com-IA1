@@ -4,27 +4,79 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // Remova a linha 'url' daqui, ela será configurada no prisma.config.ts
+  // url configurada no prisma.config.ts
 }
 
+// ─────────────────────────────────────────
+// ROLES
+// ─────────────────────────────────────────
 enum Role {
-  ADMIN
-  USER
+  SUPERADMIN  // Você — dono do SaaS (acessa tudo)
+  ADMIN       // Dono da empresa cliente (acessa só a empresa dele)
+  USER        // Funcionário da empresa cliente (acesso limitado)
 }
 
+// ─────────────────────────────────────────
+// EMPRESA CLIENTE (tenant)
+// ─────────────────────────────────────────
 model Company {
   id        String   @id @default(uuid())
   name      String
   cnpj      String?  @unique
-  users     User[]
   createdAt DateTime @default(now())
+
+  // Relações
+  users     User[]
+  documents Document[]
 }
 
+// ─────────────────────────────────────────
+// USUÁRIO
+// ─────────────────────────────────────────
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
+  name      String?
   role      Role     @default(USER)
+  createdAt DateTime @default(now())
+
+  // Chave do tenant — todo usuário pertence a uma empresa
   companyId String
   company   Company  @relation(fields: [companyId], references: [id])
+}
+
+// ─────────────────────────────────────────
+// DOCUMENTO TÉCNICO (PGR, PCMSO, Laudo, etc.)
+// ─────────────────────────────────────────
+enum DocumentType {
+  PGR
+  PCMSO
+  LAUDO_INSALUBRIDADE
+  LAUDO_PERICULOSIDADE
+  ASO
+  OUTRO
+}
+
+enum DocumentStatus {
+  PENDENTE
+  EM_ANALISE
+  CONCLUIDO
+  VENCIDO
+}
+
+model Document {
+  id          String         @id @default(uuid())
+  title       String
+  type        DocumentType
+  status      DocumentStatus @default(PENDENTE)
+  fileUrl     String?        // URL do arquivo no storage
+  aiAnalysis  String?        // Resultado da análise da IA
+  expiresAt   DateTime?      // Data de vencimento
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Isolamento por tenant — documento pertence a uma empresa
+  companyId   String
+  company     Company        @relation(fields: [companyId], references: [id])
 }

@@ -1,122 +1,239 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
+'use client'
 
-export default async function DashboardPage() {
-  const session = await getServerSession()
+import { useSession, signOut } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
+import styles from "./dashboard.module.css"
+
+const NAV_ITEMS = [
+  { id: "overview",  label: "Visão Geral",    icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
+  { id: "documents", label: "Documentos",     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+  { id: "employees", label: "Funcionários",   icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
+  { id: "ai",        label: "Análise com IA", icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" },
+  { id: "reports",   label: "Relatórios",     icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+]
+
+export default function DashboardPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const [activeNav, setActiveNav] = useState("overview")
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  if (status === "loading") return (
+    <div className={styles.loadingScreen}>
+      <div className={styles.loadingSpinner} />
+    </div>
+  )
 
   if (!session) {
-    redirect("/login")
+    router.replace("/login")
+    return null
   }
 
+  const user = session.user as any
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN"
+
   return (
-    <div className="flex h-screen bg-[#f4f7f6] font-sans text-slate-900 overflow-hidden">
-      {/* Barra lateral escura */}
-      <aside className="w-72 bg-[#002b2d] text-white flex flex-col shadow-2xl z-10">
-        <div className="p-8 border-b border-teal-900/40">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center font-bold text-2xl">
-              M
+    <div className={styles.root}>
+
+      {/* SIDEBAR */}
+      <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed}`}>
+        <div className={styles.sidebarHeader}>
+          <svg viewBox="0 0 340 340" className={styles.sidebarLogo}>
+            <path id="logo_path_1" d="M47.67 0h226.59v226.59H47.67z" />
+            <path id="logo_path_2"
+              d="M376.14 249.62H273.91l44.41-59.17-68.08-91.83V244H239V64.65l86.32 116.44 87.29-116.27V244h-11.22V98.46l-69.08 92Zm-79.78-11.22h57.5l-28.57-38.55Z"
+              transform="translate(-164.86 -49.53)"
+            />
+          </svg>
+          {sidebarOpen && (
+            <div className={styles.sidebarBrand}>
+              <span className={styles.sidebarBrandName}>Morelli</span>
+              <span className={styles.sidebarBrandSub}>Engenharia</span>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold tracking-tight">
-                Morelli <span className="text-teal-300">Engenharia</span>
-              </h2>
-              <p className="text-[11px] text-teal-200/70 uppercase tracking-[0.2em]">
-                Segurança do Trabalho
-              </p>
-            </div>
-          </div>
+          )}
         </div>
 
-        <nav className="flex-1 p-6 space-y-2 text-sm">
-          <a className="flex items-center gap-3 px-3 py-2 rounded-2xl bg-teal-600/20 text-teal-200 font-semibold border-l-4 border-teal-400 cursor-pointer">
-            <span className="w-6 h-6 rounded-full border border-teal-300/60 flex items-center justify-center text-xs">
-              ◦
-            </span>
-            Painel Principal
-          </a>
-          <a className="flex items-center gap-3 px-3 py-2 rounded-2xl text-slate-200/80 hover:text-white hover:bg-white/5 transition cursor-pointer">
-            <span className="w-6 h-6 rounded-full border border-slate-500/70 flex items-center justify-center text-xs">
-              ◦
-            </span>
-            Laudos (PGR/PCMSO)
-          </a>
-          <a className="flex items-center gap-3 px-3 py-2 rounded-2xl text-slate-200/80 hover:text-white hover:bg-white/5 transition cursor-pointer">
-            <span className="w-6 h-6 rounded-full border border-slate-500/70 flex items-center justify-center text-xs">
-              ◦
-            </span>
-            Análise de Riscos
-          </a>
-          <a className="flex items-center gap-3 px-3 py-2 rounded-2xl text-slate-200/80 hover:text-white hover:bg-white/5 transition cursor-pointer">
-            <span className="w-6 h-6 rounded-full border border-slate-500/70 flex items-center justify-center text-xs">
-              ◦
-            </span>
-            Treinamentos
-          </a>
+        <nav className={styles.sidebarNav}>
+          {NAV_ITEMS.map(item =>
+            item.id === "employees" && !isAdmin ? null : (
+              <button
+                key={item.id}
+                className={`${styles.navItem} ${activeNav === item.id ? styles.navItemActive : ""}`}
+                onClick={() => setActiveNav(item.id)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={item.icon} />
+                </svg>
+                {sidebarOpen && <span>{item.label}</span>}
+              </button>
+            )
+          )}
         </nav>
 
-        <div className="p-6 border-t border-slate-800/60 bg-black/20 text-xs text-teal-200/80 font-mono">
-          USUÁRIO:
-          <span className="block truncate text-teal-300 mt-1">{session.user?.email}</span>
+        <div className={styles.sidebarFooter}>
+          <div className={styles.userInfo}>
+            <div className={styles.userAvatar}>
+              {user?.email?.[0]?.toUpperCase() ?? "U"}
+            </div>
+            {sidebarOpen && (
+              <div className={styles.userDetails}>
+                <span className={styles.userName}>{user?.email}</span>
+                <span className={styles.userRole}>{user?.role}</span>
+              </div>
+            )}
+          </div>
+          <button className={styles.signOutBtn} onClick={() => signOut({ callbackUrl: "/login" })}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            {sidebarOpen && <span>Sair</span>}
+          </button>
         </div>
       </aside>
 
-      {/* Conteúdo principal */}
-      <main className="flex-1 p-8 md:p-12 overflow-y-auto">
-        <header className="flex justify-between items-center mb-10">
-          <div>
-            <h1 className="text-3xl font-extrabold text-[#002b2d]">Visão Geral</h1>
-            <p className="text-slate-500 mt-1 text-base">
-              Acompanhe os principais indicadores de Segurança do Trabalho da sua operação.
-            </p>
+      {/* MAIN */}
+      <main className={`${styles.main} ${sidebarOpen ? styles.mainOpen : styles.mainClosed}`}>
+
+        {/* TOPBAR */}
+        <header className={styles.topbar}>
+          <button className={styles.menuToggle} onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div className={styles.topbarTitle}>
+            {NAV_ITEMS.find(i => i.id === activeNav)?.label}
           </div>
-          <a
-            href="/api/auth/signout"
-            className="px-5 py-2.5 rounded-full bg-white border border-slate-200 text-sm font-semibold text-red-600 hover:bg-red-50 hover:border-red-200 transition"
-          >
-            Sair
-          </a>
+          <div className={styles.topbarRight}>
+            <span className={styles.companyBadge}>{user?.companyName ?? "—"}</span>
+            {isAdmin && (
+              <button className={styles.newDocBtn} onClick={() => router.push("/register")}>
+                + Novo Usuário
+              </button>
+            )}
+          </div>
         </header>
 
-        {/* Cards de métricas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
-              Laudos Ativos
-            </h3>
-            <p className="text-4xl font-black text-slate-800">12</p>
-          </div>
+        {/* CONTENT */}
+        <div className={styles.content}>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
-              Funcionários Atendidos
-            </h3>
-            <p className="text-4xl font-black text-slate-800">148</p>
-          </div>
+          {/* VISÃO GERAL */}
+          {activeNav === "overview" && (
+            <>
+              <div className={styles.greeting}>
+                <h1 className={styles.greetingTitle}>
+                  Bem-vindo, <span>{user?.companyName ?? user?.email}</span>
+                </h1>
+                <p className={styles.greetingSubtitle}>Aqui está o resumo de segurança da sua empresa.</p>
+              </div>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
-              Riscos Pendentes
-            </h3>
-            <p className="text-4xl font-black text-amber-600">3</p>
-          </div>
-        </div>
+              <div className={styles.metricsGrid}>
+                {[
+                  { label: "Documentos Concluídos", color: "Green",  icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+                  { label: "Em Análise",             color: "Yellow", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+                  { label: "Pendentes",              color: "Orange", icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" },
+                  { label: "Vencidos",               color: "Red",    icon: "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" },
+                ].map(m => (
+                  <div key={m.label} className={`${styles.metricCard} ${styles[`metric${m.color}`]}`}>
+                    <div className={styles.metricIcon}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d={m.icon} />
+                      </svg>
+                    </div>
+                    <div className={styles.metricValue}>—</div>
+                    <div className={styles.metricLabel}>{m.label}</div>
+                  </div>
+                ))}
+              </div>
 
-        {/* CTA IA */}
-        <div className="bg-gradient-to-br from-[#004d4d] to-[#002b2d] rounded-3xl p-10 text-white shadow-xl relative overflow-hidden">
-          <div className="relative z-10 max-w-xl">
-            <h2 className="text-3xl font-bold mb-4">Gerar Novo Laudo com IA</h2>
-            <p className="text-teal-100/80 mb-6 text-base">
-              Use a inteligência artificial da Morelli para estruturar automaticamente a base dos seus documentos
-              técnicos em poucos segundos.
-            </p>
-            <button className="bg-teal-400 text-[#002b2d] px-8 py-3 rounded-xl font-semibold text-sm tracking-wide shadow-lg shadow-teal-500/30 transform transition hover:bg-teal-300 hover:scale-[1.02]">
-              + INICIAR NOVA ANÁLISE
-            </button>
-          </div>
-          <div className="absolute right-[-5%] top-[-20%] text-[260px] font-black opacity-5 select-none">
-            M
-          </div>
+              <div className={styles.tableCard}>
+                <div className={styles.tableHeader}>
+                  <h2 className={styles.tableTitle}>Documentos Recentes</h2>
+                  <button className={styles.viewAllBtn} onClick={() => setActiveNav("documents")}>
+                    Ver todos →
+                  </button>
+                </div>
+                <div className={styles.emptyState}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p>Nenhum documento cadastrado ainda.</p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* DOCUMENTOS */}
+          {activeNav === "documents" && (
+            <div className={styles.tableCard}>
+              <div className={styles.tableHeader}>
+                <h2 className={styles.tableTitle}>Todos os Documentos</h2>
+                <button className={styles.newDocBtn}>+ Novo Documento</button>
+              </div>
+              <div className={styles.emptyState}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p>Nenhum documento cadastrado ainda.</p>
+              </div>
+            </div>
+          )}
+
+          {/* FUNCIONÁRIOS */}
+          {activeNav === "employees" && (
+            <div className={styles.tableCard}>
+              <div className={styles.tableHeader}>
+                <h2 className={styles.tableTitle}>Funcionários</h2>
+                <button className={styles.newDocBtn} onClick={() => router.push("/register")}>+ Cadastrar</button>
+              </div>
+              <div className={styles.emptyState}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <p>Nenhum funcionário cadastrado ainda.</p>
+              </div>
+            </div>
+          )}
+
+          {/* IA */}
+          {activeNav === "ai" && (
+            <div className={styles.aiSection}>
+              <div className={styles.aiCard}>
+                <div className={styles.aiIcon}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <h2 className={styles.aiTitle}>Análise Inteligente de Documentos</h2>
+                <p className={styles.aiDesc}>
+                  Faça upload de laudos técnicos, PGR ou PCMSO e nossa IA identifica automaticamente
+                  direitos trabalhistas como insalubridade e periculosidade, além de inconsistências
+                  com as Normas Regulamentadoras vigentes.
+                </p>
+                <div className={styles.aiUpload}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span>Arraste um documento ou clique para fazer upload</span>
+                  <span className={styles.aiUploadSub}>PDF, DOCX até 20MB</span>
+                </div>
+                <button className={styles.aiBtn}>Analisar Documento</button>
+              </div>
+            </div>
+          )}
+
+          {/* RELATÓRIOS */}
+          {activeNav === "reports" && (
+            <div className={styles.comingSoon}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <h2>Em desenvolvimento</h2>
+              <p>Os relatórios estarão disponíveis em breve.</p>
+            </div>
+          )}
+
         </div>
       </main>
     </div>
