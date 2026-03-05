@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useState, useEffect, useCallback } from "react"
 import styles from "./dashboard.module.css"
 import DocumentsSection from "./DocumentsSection"
+import AIChat from "./AIChat"
 
 const NAV_ITEMS = [
   { id: "overview",  label: "Visão Geral",    icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -312,31 +313,7 @@ export default function DashboardPage() {
           )}
 
           {/* IA */}
-          {activeNav === "ai" && (
-            <div className={styles.aiSection}>
-              <div className={styles.aiCard}>
-                <div className={styles.aiIcon}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-                <h2 className={styles.aiTitle}>Análise Inteligente de Documentos</h2>
-                <p className={styles.aiDesc}>
-                  Faça upload de laudos técnicos, PGR ou PCMSO e nossa IA identifica automaticamente
-                  direitos trabalhistas como insalubridade e periculosidade, além de inconsistências
-                  com as Normas Regulamentadoras vigentes.
-                </p>
-                <div className={styles.aiUpload}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  <span>Arraste um documento ou clique para fazer upload</span>
-                  <span className={styles.aiUploadSub}>PDF, DOCX até 20MB</span>
-                </div>
-                <button className={styles.aiBtn}>Analisar Documento</button>
-              </div>
-            </div>
-          )}
+          {activeNav === "ai" && <AIChat />}
 
           {/* RELATÓRIOS */}
           {activeNav === "reports" && (

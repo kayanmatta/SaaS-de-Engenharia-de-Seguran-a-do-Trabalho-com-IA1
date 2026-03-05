@@ -32,13 +32,15 @@ enum DocumentStatus {
 }
 
 model Company {
-  id        String     @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String
-  cnpj      String?    @unique
-  createdAt DateTime   @default(now())
+  cnpj      String?  @unique
+  createdAt DateTime @default(now())
 
   users     User[]
   documents Document[]
+  knowledge CompanyKnowledge[]
+  chatMessages ChatMessage[]
 }
 
 model User {
@@ -60,11 +62,49 @@ model Document {
   status     DocumentStatus @default(PENDENTE)
   fileUrl    String?
   fileName   String?
-  aiAnalysis String?
+  aiAnalysis String?        // Resumo da análise da IA
   expiresAt  DateTime?
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
   companyId  String
   company    Company        @relation(fields: [companyId], references: [id])
+
+  // Pedaços de texto para RAG
+  chunks     DocumentChunk[]
+}
+
+// Pedaços de texto extraídos dos documentos (para RAG)
+model DocumentChunk {
+  id         String   @id @default(uuid())
+  content    String   // Trecho do texto
+  embedding  String?  // Vetor em JSON (para busca semântica)
+  chunkIndex Int      // Posição no documento
+  createdAt  DateTime @default(now())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+// Perfil acumulado da empresa — aprende com cada documento
+model CompanyKnowledge {
+  id        String   @id @default(uuid())
+  category  String   // Ex: "insalubridade", "periculosidade", "setores", "nrs_aplicaveis"
+  content   String   // O conhecimento acumulado em texto
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+}
+
+// Histórico do chat da empresa com a IA
+model ChatMessage {
+  id        String   @id @default(uuid())
+  role      String   // "user" ou "assistant"
+  content   String
+  createdAt DateTime @default(now())
+
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
 }

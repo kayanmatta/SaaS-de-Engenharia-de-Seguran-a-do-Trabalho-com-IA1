@@ -42,7 +42,6 @@ export default function DocumentsSection() {
   const [error, setError] = useState("")
   const [showModal, setShowModal] = useState(false)
 
-  // Form state
   const [title, setTitle] = useState("")
   const [type, setType] = useState("")
   const [expiresAt, setExpiresAt] = useState("")
@@ -92,8 +91,10 @@ export default function DocumentsSection() {
         body: formData,
       })
 
+      // Lê o JSON UMA única vez
+      const data = await res.json()
+
       if (!res.ok) {
-        const data = await res.json()
         setUploadError(data.error || "Erro ao enviar documento.")
         return
       }
@@ -105,6 +106,18 @@ export default function DocumentsSection() {
       setFile(null)
       setShowModal(false)
       fetchDocuments()
+
+      // Dispara análise com IA em background (não bloqueia a UI)
+      if (data?.id) {
+        fetch("/api/documents/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documentId: data.id }),
+        })
+        .then(() => fetchDocuments()) // atualiza status após análise
+        .catch(console.error)
+      }
+
     } catch {
       setUploadError("Erro de conexão. Tente novamente.")
     } finally {
@@ -196,7 +209,6 @@ export default function DocumentsSection() {
         )}
       </div>
 
-      {/* MODAL DE UPLOAD */}
       {showModal && (
         <div className={styles.overlay} onClick={() => setShowModal(false)}>
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
@@ -210,10 +222,7 @@ export default function DocumentsSection() {
             </div>
 
             <form onSubmit={handleUpload} className={styles.form}>
-
-              {uploadError && (
-                <div className={styles.formError}>{uploadError}</div>
-              )}
+              {uploadError && <div className={styles.formError}>{uploadError}</div>}
 
               <div className={styles.field}>
                 <label className={styles.label}>Título *</label>
