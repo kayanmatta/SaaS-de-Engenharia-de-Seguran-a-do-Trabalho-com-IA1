@@ -10,31 +10,107 @@ type Message = {
   createdAt?: string
 }
 
+type Doc = {
+  id: string
+  title: string
+  type: string
+}
+
+const TYPE_LABEL: Record<string, string> = {
+  PGR: "PGR", PCMSO: "PCMSO", ASO: "ASO", CLCB: "CLCB",
+  LAUDO_INSALUBRIDADE: "L. Insalub.", LAUDO_PERICULOSIDADE: "L. Periculosidade",
+  RELATORIO_TECNICO: "Rel. Técnico", TLCAT: "TLCAT",
+}
+
 export default function AIChat() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [messages, setMessages]         = useState<Message[]>([])
+  const [input, setInput]               = useState("")
+  const [loading, setLoading]           = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const bottomRef = useRef<HTMLDivElement>(null)
 
+  // Documento selecionado
+  const [docs, setDocs]                 = useState<Doc[]>([])
+  const [selectedDoc, setSelectedDoc]   = useState<string>("") // id ou ""
+  const [showDocMenu, setShowDocMenu]   = useState(false)
+
+  // Arquivo temporário no chat
+  const [tempFile, setTempFile]         = useState<File | null>(null)
+  const [tempFileText, setTempFileText] = useState<string>("")
+  const [loadingFile, setLoadingFile]   = useState(false)
+
+  const bottomRef  = useRef<HTMLDivElement>(null)
+  const fileRef    = useRef<HTMLInputElement>(null)
+  const docMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { fetchHistory(); fetchDocs() }, [])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages])
+
+  // Fecha dropdown ao clicar fora
   useEffect(() => {
-    fetchHistory()
+    const handler = (e: MouseEvent) => {
+      if (docMenuRef.current && !docMenuRef.current.contains(e.target as Node)) {
+        setShowDocMenu(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
   }, [])
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
 
   const fetchHistory = async () => {
     try {
       const res = await fetch("/api/chat")
-      if (res.ok) {
-        const data = await res.json()
-        setMessages(data)
-      }
+      if (res.ok) setMessages(await res.json())
     } finally {
       setLoadingHistory(false)
     }
+  }
+
+  const fetchDocs = async () => {
+    try {
+      const res = await fetch("/api/documents")
+      if (res.ok) {
+        const data = await res.json()
+        setDocs(data.map((d: any) => ({ id: d.id, title: d.title, type: d.type })))
+      }
+    } catch {}
+  }
+
+  // Lê arquivo temporário (PDF → texto via API, imagem → base64)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setTempFile(file)
+    setSelectedDoc("") // deseleciona doc salvo
+    setLoadingFile(true)
+
+    try {
+      if (file.type === "application/pdf") {
+        // Envia para extração de texto
+        const form = new FormData()
+        form.append("file", file)
+        const res = await fetch("/api/chat/extract", { method: "POST", body: form })
+        if (res.ok) {
+          const { text } = await res.json()
+          setTempFileText(text)
+        }
+      } else {
+        // Imagem: converte para base64
+        const reader = new FileReader()
+        reader.onload = () => setTempFileText(reader.result as string)
+        reader.readAsDataURL(file)
+      }
+    } catch {
+      setTempFileText("")
+    } finally {
+      setLoadingFile(false)
+    }
+  }
+
+  const removeTempFile = () => {
+    setTempFile(null)
+    setTempFileText("")
+    if (fileRef.current) fileRef.current.value = ""
   }
 
   const sendMessage = async () => {
@@ -49,23 +125,23 @@ export default function AIChat() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage.content }),
+        body: JSON.stringify({
+          message: userMessage.content,
+          documentId: selectedDoc || undefined,
+          tempFileText: tempFileText || undefined,
+          tempFileName: tempFile?.name || undefined,
+        }),
       })
 
       const data = await res.json()
-
-      if (res.ok) {
-        setMessages(prev => [...prev, { role: "assistant", content: data.answer }])
-      } else {
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          content: "Desculpe, ocorreu um erro. Tente novamente."
-        }])
-      }
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: res.ok ? data.answer : "Desculpe, ocorreu um erro. Tente novamente.",
+      }])
     } catch {
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: "Erro de conexão. Verifique sua internet."
+        content: "Erro de conexão. Verifique sua internet.",
       }])
     } finally {
       setLoading(false)
@@ -73,11 +149,10 @@ export default function AIChat() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
+
+  const selectedDocName = docs.find(d => d.id === selectedDoc)?.title
 
   return (
     <div className={styles.wrapper}>
@@ -98,17 +173,76 @@ export default function AIChat() {
             </div>
           </div>
         </div>
-        <button className={styles.clearBtn} onClick={() => setMessages([])}>
-          Limpar conversa
-        </button>
+
+        <div className={styles.headerRight}>
+          {/* Seletor de documento salvo */}
+          <div className={styles.docSelector} ref={docMenuRef}>
+            <button
+              className={`${styles.docSelectorBtn} ${selectedDoc ? styles.docSelectorActive : ""}`}
+              onClick={() => setShowDocMenu(!showDocMenu)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {selectedDoc ? selectedDocName : "Selecionar documento"}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showDocMenu && (
+              <div className={styles.docDropdown}>
+                <button
+                  className={`${styles.docOption} ${!selectedDoc ? styles.docOptionActive : ""}`}
+                  onClick={() => { setSelectedDoc(""); setShowDocMenu(false) }}
+                >
+                  Todos os documentos
+                </button>
+                {docs.length === 0 && (
+                  <div className={styles.docEmpty}>Nenhum documento salvo</div>
+                )}
+                {docs.map(doc => (
+                  <button
+                    key={doc.id}
+                    className={`${styles.docOption} ${selectedDoc === doc.id ? styles.docOptionActive : ""}`}
+                    onClick={() => { setSelectedDoc(doc.id); removeTempFile(); setShowDocMenu(false) }}
+                  >
+                    <span className={styles.docOptionBadge}>{TYPE_LABEL[doc.type] ?? doc.type}</span>
+                    {doc.title}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button className={styles.clearBtn} onClick={() => setMessages([])}>
+            Limpar
+          </button>
+        </div>
       </div>
+
+      {/* ARQUIVO TEMPORÁRIO SELECIONADO */}
+      {tempFile && (
+        <div className={styles.tempFileBar}>
+          {loadingFile ? (
+            <><div className={styles.miniSpinner} /> Extraindo texto...</>
+          ) : (
+            <>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+              <span>{tempFile.name}</span>
+              <span className={styles.tempFileSize}>({(tempFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+              <button className={styles.removeTempFile} onClick={removeTempFile}>✕</button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* MESSAGES */}
       <div className={styles.messages}>
         {loadingHistory ? (
-          <div className={styles.loadingHistory}>
-            <div className={styles.spinner} />
-          </div>
+          <div className={styles.loadingHistory}><div className={styles.spinner} /></div>
         ) : messages.length === 0 ? (
           <div className={styles.welcome}>
             <div className={styles.welcomeIcon}>
@@ -118,8 +252,7 @@ export default function AIChat() {
             </div>
             <h3 className={styles.welcomeTitle}>Olá! Sou seu assistente de SST</h3>
             <p className={styles.welcomeText}>
-              Aprendo com os documentos da sua empresa e respondo dúvidas sobre
-              insalubridade, periculosidade, NRs e muito mais.
+              Selecione um documento salvo ou envie um arquivo para conversar sobre ele.
             </p>
             <div className={styles.suggestions}>
               {[
@@ -128,25 +261,18 @@ export default function AIChat() {
                 "Resuma o último PGR enviado",
                 "Há riscos de periculosidade identificados?",
               ].map(s => (
-                <button key={s} className={styles.suggestion} onClick={() => setInput(s)}>
-                  {s}
-                </button>
+                <button key={s} className={styles.suggestion} onClick={() => setInput(s)}>{s}</button>
               ))}
             </div>
           </div>
         ) : (
           messages.map((msg, i) => (
             <div key={i} className={`${styles.message} ${styles[msg.role]}`}>
-              {msg.role === "assistant" && (
-                <div className={styles.msgAvatar}>M</div>
-              )}
+              {msg.role === "assistant" && <div className={styles.msgAvatar}>M</div>}
               <div className={styles.msgBubble}>
                 <div className={styles.msgContent}>
                   {msg.content.split("\n").map((line, j) => (
-                    <span key={j}>
-                      {line}
-                      {j < msg.content.split("\n").length - 1 && <br />}
-                    </span>
+                    <span key={j}>{line}{j < msg.content.split("\n").length - 1 && <br />}</span>
                   ))}
                 </div>
               </div>
@@ -158,21 +284,40 @@ export default function AIChat() {
           <div className={`${styles.message} ${styles.assistant}`}>
             <div className={styles.msgAvatar}>M</div>
             <div className={styles.msgBubble}>
-              <div className={styles.typing}>
-                <span /><span /><span />
-              </div>
+              <div className={styles.typing}><span /><span /><span /></div>
             </div>
           </div>
         )}
-
         <div ref={bottomRef} />
       </div>
 
       {/* INPUT */}
       <div className={styles.inputArea}>
+        {/* Botão de clipe — upload temporário */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,image/jpeg,image/png"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+        <button
+          className={`${styles.attachBtn} ${tempFile ? styles.attachBtnActive : ""}`}
+          onClick={() => fileRef.current?.click()}
+          title="Enviar arquivo para análise"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+          </svg>
+        </button>
+
         <textarea
           className={styles.input}
-          placeholder="Pergunte sobre seus documentos, NRs, insalubridade..."
+          placeholder={
+            selectedDoc ? `Perguntando sobre: ${selectedDocName}...` :
+            tempFile    ? `Perguntando sobre: ${tempFile.name}...` :
+            "Pergunte sobre seus documentos, NRs, insalubridade..."
+          }
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -188,7 +333,6 @@ export default function AIChat() {
           </svg>
         </button>
       </div>
-
     </div>
   )
 }

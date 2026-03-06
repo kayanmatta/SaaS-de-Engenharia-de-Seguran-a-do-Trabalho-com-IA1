@@ -428,7 +428,8 @@ ${c.content}
 export async function chatWithAI(
   companyId: string,
   question: string,
-  chatHistory: { role: string; content: string }[]
+  chatHistory: { role: string; content: string }[],
+  extraContext = ""  // ← adiciona este parâmetro
 ): Promise<string> {
 
   const relevantChunks = await findRelevantChunks(companyId, question)
@@ -474,6 +475,8 @@ Fonte: documento analisado
 PERFIL DA EMPRESA:
 
 ${profile || "Nenhum documento analisado"}
+
+${extraContext ? `CONTEXTO ADICIONAL (arquivo enviado no chat):\n${extraContext}` : ""}
 
 DOCUMENTOS RELEVANTES:
 
