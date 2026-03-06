@@ -7,7 +7,7 @@
   background: #fff;
   border-radius: 10px;
   border: 1px solid #e8ddd4;
-  overflow: hidden;
+  overflow: visible;
 }
 .tableHeader {
   display: flex;
@@ -280,3 +280,158 @@
 }
 .submitBtn:hover:not(:disabled) { background: #00a79d; }
 .submitBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ─── ADICIONAR AO FINAL DO documents.module.css ─── */
+
+/* Coluna de ações */
+.actionsCell {
+  width: 40px;
+  text-align: center;
+}
+
+/* Botão 3 pontos */
+.menuWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.menuBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.4rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.menuBtn:hover { background: #f0e8e0; }
+.menuBtn span {
+  display: block;
+  width: 4px;
+  height: 4px;
+  background: #8a7060;
+  border-radius: 50%;
+}
+
+/* Dropdown */
+.menuDropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid #e8ddd4;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(58,36,25,0.12);
+  min-width: 140px;
+  z-index: 100;
+  overflow: hidden;
+  animation: fadeDown 0.12s ease;
+}
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background: none;
+  border: none;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.78rem;
+  color: #3a2419;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+.menuItem:hover { background: #faf6f2; }
+
+.menuItemDanger { color: #ef4444; }
+.menuItemDanger:hover { background: #fff5f5; }
+
+/* Modal de confirmação de exclusão */
+.modalConfirm {
+  background: #fff;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  animation: slideUp 0.2s ease;
+}
+
+.confirmIcon {
+  width: 56px;
+  height: 56px;
+  background: #fff5f5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
+}
+
+.confirmTitle {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.2rem;
+  color: #3a2419;
+  margin: 0;
+}
+
+.confirmText {
+  font-size: 0.8rem;
+  color: #8a7060;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.confirmActions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.cancelBtn {
+  flex: 1;
+  padding: 0.65rem;
+  background: #f7f0e8;
+  border: 1px solid #e8ddd4;
+  border-radius: 8px;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.8rem;
+  color: #5a4535;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.cancelBtn:hover { background: #efe8e0; }
+
+.deleteBtn {
+  flex: 1;
+  padding: 0.65rem;
+  background: #ef4444;
+  border: none;
+  border-radius: 8px;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.menuDropdownUp {
+  bottom: calc(100% + 4px);
+  top: auto;
+}
+.deleteBtn:hover:not(:disabled) { background: #dc2626; }
+.deleteBtn:disabled { opacity: 0.6; cursor: not-allowed; }
