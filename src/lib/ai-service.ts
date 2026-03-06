@@ -2,71 +2,71 @@ import Groq from "groq-sdk"
 import { prisma } from "./prisma"
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
-
 const MODEL = "llama-3.3-70b-versatile"
 
-//////////////////////////////////////////////////////////////////
+
+// ─────────────────────────────────────────────
 // 1. EXTRAÇÃO DE TEXTO DO PDF
-//////////////////////////////////////////////////////////////////
-
+// ─────────────────────────────────────────────
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  // 1. Importação específica para ambiente Node (Legacy)
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as any)
+  try {
+    // 2. Criamos o documento SEM definir workerSrc. 
+    // O segredo é o 'disableWorker: true' e o 'verbosity: 0' para não poluir o console.
+    const loadingTask = pdfjsLib.getDocument({
+  data: new Uint8Array(buffer),
+  disableWorker: true, // Força a execução na thread principal do Node
+  isEvalSupported: false,
+  useSystemFonts: true,
+  verbosity: 0 
+} as any);
 
-  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
-      "pdfjs-dist/legacy/build/pdf.worker.mjs"
-    )
+    const pdf = await loadingTask.promise;
+    let fullText = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      
+      // Mapeia o texto e remove espaços extras para economizar tokens na IA
+      const pageText = content.items
+        .map((item: any) => (item.str ? item.str : ""))
+        .join(" ")
+        .replace(/\s+/g, " ");
+        
+      fullText += `--- PÁGINA ${i} ---\n${pageText}\n\n`;
+    }
+
+    return fullText.trim();
+  } catch (error: any) {
+    console.error("Erro detalhado na extração:", error);
+    throw new Error(`Falha ao processar o PDF: ${error.message}`);
   }
-
-  const loadingTask = pdfjsLib.getDocument({
-    data: new Uint8Array(buffer),
-    useWorkerFetch: false,
-    isEvalSupported: false,
-    useSystemFonts: true,
-  })
-
-  const pdf = await loadingTask.promise
-
-  let fullText = ""
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-
-    const page = await pdf.getPage(i)
-    const content = await page.getTextContent()
-
-    const pageText = content.items
-      .map((item: any) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ")
-
-    fullText += pageText + "\n"
-  }
-
-  return fullText
 }
 
-//////////////////////////////////////////////////////////////////
-// 2. CHUNKING
-//////////////////////////////////////////////////////////////////
 
+// ─────────────────────────────────────────────
+// 2. CHUNKING
+// ─────────────────────────────────────────────
 export function splitIntoChunks(
   text: string,
-  chunkSize = 900,
-  overlap = 150
+  chunkSize = 1800,
+  overlap = 300
 ): string[] {
 
   const chunks: string[] = []
-
   let start = 0
 
   while (start < text.length) {
 
     const end = Math.min(start + chunkSize, text.length)
-
     const chunk = text.slice(start, end).trim()
 
-    if (chunk.length > 80) chunks.push(chunk)
+    if (chunk.length > 120) {
+      chunks.push(chunk)
+    }
 
     start += chunkSize - overlap
   }
@@ -74,19 +74,35 @@ export function splitIntoChunks(
   return chunks
 }
 
-//////////////////////////////////////////////////////////////////
-// 3. EMBEDDING SIMPLES
-//////////////////////////////////////////////////////////////////
 
+// ─────────────────────────────────────────────
+// 3. EMBEDDING SIMPLES
+// ─────────────────────────────────────────────
 export function simpleEmbedding(text: string): number[] {
 
   const keywords = [
-    "insalubridade","periculosidade","ruído","químico","físico",
-    "nr-15","nr-6","nr-9","epi","risco","exposição","limite",
-    "tolerância","pgr","pcmso","aso","laudo","adicional","grau",
-    "agente","biológico","ergonômico","acidente","solda","poeira",
-    "temperatura","vibração","radiação","pressão","eletricidade",
-    "fumos","metal","calor","frio","iluminação","ergonomia"
+
+    "risco","perigo","exposição","agente",
+
+    "insalubridade","adicional","grau mínimo","grau médio","grau máximo",
+
+    "periculosidade","inflamável","explosivo","eletricidade","altura",
+
+    "ruído","calor","frio","vibração","radiação","pressão",
+
+    "fumos","poeira","névoa","gás","vapores","químico",
+
+    "biológico","bactéria","fungo","vírus",
+
+    "ergonômico","postura","repetitivo","levantamento",
+
+    "acidente","máquina","corte","queda",
+
+    "pgr","pcmso","aso","ltcat","laudo",
+
+    "nr-6","nr-9","nr-12","nr-15","nr-17","nr-35",
+
+    "epi","epc","controle","proteção"
   ]
 
   const lower = text.toLowerCase()
@@ -94,9 +110,12 @@ export function simpleEmbedding(text: string): number[] {
   return keywords.map(k => lower.includes(k) ? 1 : 0)
 }
 
+
 function cosineSimilarity(a: number[], b: number[]): number {
 
-  const dot = a.reduce((sum, val, i) => sum + val * b[i], 0)
+  if (!a.length || !b.length) return 0
+
+  const dot = a.reduce((sum, val, i) => sum + val * (b[i] || 0), 0)
 
   const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0))
   const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0))
@@ -106,10 +125,10 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (normA * normB)
 }
 
-//////////////////////////////////////////////////////////////////
-// 4. PROCESSAMENTO DO DOCUMENTO
-//////////////////////////////////////////////////////////////////
 
+// ─────────────────────────────────────────────
+// 4. PROCESSAMENTO DO DOCUMENTO
+// ─────────────────────────────────────────────
 export async function processDocument(
   documentId: string,
   companyId: string,
@@ -120,7 +139,7 @@ export async function processDocument(
 
   const fullText = await extractTextFromPDF(fileBuffer)
 
-  if (!fullText || fullText.length < 80) {
+  if (!fullText || fullText.length < 100) {
     throw new Error("Não foi possível extrair texto do documento.")
   }
 
@@ -128,13 +147,11 @@ export async function processDocument(
 
   for (let i = 0; i < chunks.length; i++) {
 
-    const embedding = simpleEmbedding(chunks[i])
-
     await prisma.documentChunk.create({
       data: {
         documentId,
         content: chunks[i],
-        embedding: JSON.stringify(embedding),
+        embedding: JSON.stringify(simpleEmbedding(chunks[i])),
         chunkIndex: i
       }
     })
@@ -155,10 +172,10 @@ export async function processDocument(
   return analysis
 }
 
-//////////////////////////////////////////////////////////////////
-// 5. ANÁLISE DO DOCUMENTO
-//////////////////////////////////////////////////////////////////
 
+// ─────────────────────────────────────────────
+// 5. ANÁLISE DO DOCUMENTO
+// ─────────────────────────────────────────────
 async function analyzeDocument(
   text: string,
   documentType: string,
@@ -167,7 +184,7 @@ async function analyzeDocument(
 
   const truncated =
     text.length > 9000
-      ? text.slice(0, 4500) + "\n[...]\n" + text.slice(-4500)
+      ? text.slice(0, 4500) + "\n...\n" + text.slice(-4500)
       : text
 
   const response = await groq.chat.completions.create({
@@ -179,53 +196,64 @@ async function analyzeDocument(
       {
         role: "system",
         content: `
-Você é um Engenheiro de Segurança do Trabalho especialista em análise documental.
+Você é um Engenheiro de Segurança do Trabalho especialista em documentos SST brasileiros.
 
 Analise documentos como:
+PGR
+PCMSO
+LTCAT
+Laudos técnicos
 
-- PGR
-- LTCAT
-- PCMSO
-- Laudos de Insalubridade
-- Laudos de Periculosidade
-- APR
-- Ordens de Serviço
-
-REGRAS:
-
-• Nunca invente informações
-• Use somente o conteúdo do documento
-• Se algo não existir diga: "O documento não apresenta essa informação."
-• Cite setores quando possível
-• Cite normas regulamentadoras quando aplicável
+Seja técnico, preciso e objetivo.
 `
       },
 
       {
         role: "user",
         content: `
-Analise o documento abaixo.
 
-Documento: ${documentTitle}
-Tipo: ${documentType}
+Analise o documento:
+
+TÍTULO: ${documentTitle}
+TIPO: ${documentType}
 
 Extraia:
 
-1. Resumo executivo
-2. Setores identificados
-3. Riscos físicos
-4. Riscos químicos
-5. Riscos biológicos
-6. Riscos ergonômicos
-7. Riscos de acidente
-8. Situações de insalubridade
-9. Situações de periculosidade
-10. Normas regulamentadoras citadas
-11. Recomendações de segurança
+1. Resumo técnico
 
-Documento:
+2. Setores ou atividades
+
+3. Riscos ocupacionais:
+- físicos
+- químicos
+- biológicos
+- ergonômicos
+- acidentes
+
+4. Agentes nocivos
+
+5. Possível INSALUBRIDADE
+- setor
+- agente
+- grau
+
+6. Possível PERICULOSIDADE
+- inflamáveis
+- explosivos
+- eletricidade
+- altura
+
+7. Normas Regulamentadoras aplicáveis
+
+8. Medidas de controle
+- EPC
+- EPI
+- administrativas
+
+DOCUMENTO:
 
 ${truncated}
+
 `
       }
     ],
@@ -236,10 +264,10 @@ ${truncated}
   return response.choices[0].message.content ?? ""
 }
 
-//////////////////////////////////////////////////////////////////
-// 6. PERFIL DE CONHECIMENTO DA EMPRESA
-//////////////////////////////////////////////////////////////////
 
+// ─────────────────────────────────────────────
+// 6. PERFIL DA EMPRESA
+// ─────────────────────────────────────────────
 async function updateCompanyKnowledge(
   companyId: string,
   documentType: string,
@@ -262,20 +290,14 @@ async function updateCompanyKnowledge(
 
       {
         role: "system",
-        content: `
-Você é um especialista em SST.
-
-Responda APENAS JSON válido.
-
-Não use markdown.
-Não explique nada.
-`
+        content: "Responda APENAS JSON válido."
       },
 
       {
         role: "user",
         content: `
-Atualize o perfil de risco da empresa.
+
+Atualize o perfil SST da empresa.
 
 CONHECIMENTO ATUAL:
 ${existingText || "nenhum"}
@@ -283,7 +305,7 @@ ${existingText || "nenhum"}
 NOVA ANÁLISE:
 ${analysis}
 
-Retorne:
+Retorne JSON:
 
 {
 "setor_riscos":"",
@@ -293,6 +315,7 @@ Retorne:
 "perfil_empresa":"",
 "tendencias":[]
 }
+
 `
       }
     ],
@@ -304,7 +327,14 @@ Retorne:
 
   try {
 
-    const clean = raw.replace(/```json/g, "").replace(/```/g, "")
+    const clean = raw
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim()
+
+    if (!clean.startsWith("{")) {
+      throw new Error("Resposta não é JSON")
+    }
 
     const data = JSON.parse(clean)
 
@@ -336,10 +366,10 @@ Retorne:
   }
 }
 
-//////////////////////////////////////////////////////////////////
-// 7. BUSCA RAG
-//////////////////////////////////////////////////////////////////
 
+// ─────────────────────────────────────────────
+// 7. RAG
+// ─────────────────────────────────────────────
 export async function findRelevantChunks(
   companyId: string,
   question: string,
@@ -359,34 +389,42 @@ export async function findRelevantChunks(
 
   const scored = chunks
     .filter(c => c.embedding)
-    .map(c => ({
+    .map(c => {
 
-      content: c.content,
-      title: c.document.title,
-      type: c.document.type,
+      let emb: number[] = []
 
-      score: cosineSimilarity(
-        qEmbedding,
-        JSON.parse(c.embedding!)
-      )
-    }))
+      try {
+        emb =
+          typeof c.embedding === "string"
+            ? JSON.parse(c.embedding)
+            : c.embedding ?? []
+      } catch {
+        emb = []
+      }
+
+      return {
+        content: c.content,
+        title: c.document.title,
+        type: c.document.type,
+        score: cosineSimilarity(qEmbedding, emb)
+      }
+    })
+    .filter(c => c.score > 0.18)
     .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
 
-  const filtered = scored.filter(c => c.score > 0.15).slice(0, topK)
-
-  return filtered.map(c => `
+  return scored.map(c => `
 DOCUMENTO: ${c.title}
 TIPO: ${c.type}
 
-TRECHO:
 ${c.content}
 `)
 }
 
-//////////////////////////////////////////////////////////////////
-// 8. CHAT
-//////////////////////////////////////////////////////////////////
 
+// ─────────────────────────────────────────────
+// 8. CHAT
+// ─────────────────────────────────────────────
 export async function chatWithAI(
   companyId: string,
   question: string,
@@ -404,26 +442,43 @@ export async function chatWithAI(
     .join("\n")
 
   const systemPrompt = `
-Você é um assistente especialista em Segurança do Trabalho no Brasil.
 
-Use os documentos da empresa para responder.
+Você é um Engenheiro de Segurança do Trabalho especialista em documentos SST.
 
-REGRAS:
+Responda utilizando APENAS as informações dos documentos fornecidos.
 
-• Não invente dados
-• Baseie-se nos documentos
-• Cite normas quando possível
-• Sugira medidas de controle quando houver riscos
-• Se a informação não existir diga:
-"O documento não apresenta essa informação."
+REGRAS IMPORTANTES:
+
+- Nunca invente informações
+- Não faça suposições
+- Se a informação não existir, diga claramente que não foi encontrada
+- Cite sempre a fonte do documento
+
+FORMATO DA RESPOSTA:
+
+Riscos presentes no setor:
+
+1. Tipo de risco: descrição
+2. Tipo de risco: descrição
+
+Possíveis efeitos à saúde:
+(lista breve)
+
+Medidas de controle:
+- EPC
+- EPI
+- administrativas
+
+Fonte: documento analisado
 
 PERFIL DA EMPRESA:
 
-${profile || "Nenhum documento analisado ainda."}
+${profile || "Nenhum documento analisado"}
 
 DOCUMENTOS RELEVANTES:
 
-${relevantChunks.join("\n\n---\n\n") || "Nenhum trecho relevante encontrado."}
+${relevantChunks.join("\n\n---\n\n") || "Nenhum trecho relevante encontrado"}
+
 `
 
   const messages: Groq.Chat.ChatCompletionMessageParam[] = [
