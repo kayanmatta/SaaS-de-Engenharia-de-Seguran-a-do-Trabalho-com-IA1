@@ -390,3 +390,78 @@
 }
 .attachBtn:hover { border-color: #00a79d; color: #00a79d; }
 .attachBtnActive { border-color: #00a79d; background: #00a79d12; color: #00836d; }
+/* ─── ADICIONAR AO FINAL DO ai-chat.module.css ─── */
+
+.docSelectorText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+/* Campo de busca dentro do dropdown */
+.docSearch {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f0e8e0;
+  color: #8a7060;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.docSearchInput {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.72rem;
+  color: #3a2419;
+  background: transparent;
+  min-width: 0;
+}
+.docSearchInput::placeholder { color: #c4b0a0; }
+
+.docSearchClear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #b0a090;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.25rem;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.docSearchClear:hover { color: #ef4444; }
+
+/* Lista scrollável */
+.docList {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.docList::-webkit-scrollbar { width: 4px; }
+.docList::-webkit-scrollbar-track { background: transparent; }
+.docList::-webkit-scrollbar-thumb { background: #e8ddd4; border-radius: 2px; }
+
+.docOptionTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Contador no rodapé do dropdown */
+.docCount {
+  padding: 0.4rem 0.75rem;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.65rem;
+  color: #b0a090;
+  border-top: 1px solid #f0e8e0;
+  text-align: right;
+  background: #faf6f2;
+}
