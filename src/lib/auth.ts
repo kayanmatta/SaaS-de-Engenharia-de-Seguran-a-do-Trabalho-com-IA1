@@ -4,35 +4,27 @@ import { prisma } from "./prisma"
 import bcrypt from "bcrypt"
 
 // ─── Rate limiting simples em memória ────────────────────────────────────────
-// Máximo de 5 tentativas por email a cada 15 minutos
 const loginAttempts = new Map<string, { count: number; firstAttempt: number }>()
 const MAX_ATTEMPTS = 5
-const WINDOW_MS = 15 * 60 * 1000 // 15 minutos
+const WINDOW_MS = 15 * 60 * 1000
 
-function checkRateLimit(email: string): { blocked: boolean; remaining: number } {
+function checkRateLimit(email: string): boolean {
   const now = Date.now()
   const key = email.toLowerCase().trim()
   const record = loginAttempts.get(key)
-
   if (!record || now - record.firstAttempt > WINDOW_MS) {
-    // Janela expirada ou primeiro acesso — reseta
     loginAttempts.set(key, { count: 1, firstAttempt: now })
-    return { blocked: false, remaining: MAX_ATTEMPTS - 1 }
+    return false
   }
-
-  if (record.count >= MAX_ATTEMPTS) {
-    return { blocked: true, remaining: 0 }
-  }
-
+  if (record.count >= MAX_ATTEMPTS) return true
   record.count++
-  return { blocked: false, remaining: MAX_ATTEMPTS - record.count }
+  return false
 }
 
 function resetRateLimit(email: string) {
   loginAttempts.delete(email.toLowerCase().trim())
 }
 
-// ─── Auth Options ─────────────────────────────────────────────────────────────
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -44,29 +36,22 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        // Valida tamanho para evitar ataques de payload gigante
         if (credentials.email.length > 255 || credentials.password.length > 512) return null
 
-        // Rate limiting por email
-        const rateLimit = checkRateLimit(credentials.email)
-        if (rateLimit.blocked) {
+        if (checkRateLimit(credentials.email)) {
           throw new Error("Muitas tentativas. Tente novamente em 15 minutos.")
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email.toLowerCase().trim() },
+          where: { email: credentials.email.trim() },
           include: { company: true },
         })
 
-        // Sempre executa bcrypt mesmo se user não existe (evita timing attack)
-        const dummyHash = "$2b$12$invalidhashfortimingprotection000000000000000000000000"
-        const isValid = user
-          ? await bcrypt.compare(credentials.password, user.password)
-          : await bcrypt.compare(credentials.password, dummyHash).then(() => false)
+        if (!user) return null
 
-        if (!user || !isValid) return null
+        const isValid = await bcrypt.compare(credentials.password, user.password)
+        if (!isValid) return null
 
-        // Login bem sucedido — reseta contador
         resetRateLimit(credentials.email)
 
         return {
@@ -80,13 +65,8 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-  pages: {
-    signIn: "/login",
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 horas
-  },
+  pages: { signIn: "/login" },
+  session: { strategy: "jwt", maxAge: 24 * 60 * 60 },
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
     async jwt({ token, user }) {
