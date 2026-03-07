@@ -6,18 +6,42 @@ import { createClient } from "@supabase/supabase-js"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Chave secreta de serviço
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET — lista documentos com URLs seguras (Signed URLs)
+// ─── Tipos e tamanhos permitidos ─────────────────────────────────────────────
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]
+const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+
+const ALLOWED_DOC_TYPES = [
+  "PGR", "PCMSO", "LAUDO_INSALUBRIDADE", "LAUDO_PERICULOSIDADE",
+  "ASO", "CLCB", "RELATORIO_TECNICO", "TLCAT",
+]
+
+// ─── Sanitiza strings para evitar XSS ────────────────────────────────────────
+function sanitize(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+    .replace(/\//g, "&#x2F;")
+    .trim()
+    .slice(0, 255) // Limita tamanho máximo
+}
+
+// ─── GET — lista documentos com Signed URLs ───────────────────────────────────
 export async function GET() {
   const session = await getServerSession(authOptions)
-
-  if (!session) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 })
-  }
+  if (!session) return NextResponse.json({ error: "Não autorizado." }, { status: 401 })
 
   const companyId = (session.user as any)?.companyId
+  if (!companyId) return NextResponse.json({ error: "Empresa não encontrada." }, { status: 403 })
 
   try {
     const documents = await prisma.document.findMany({
@@ -25,23 +49,17 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     })
 
-    // Gera uma URL assinada para cada documento
-    // Isso resolve o erro 404 e garante que o link funcione por 1 hora
-const docsWithSecureLinks = await Promise.all(
-  documents.map(async (doc) => {
-    // Adicionamos uma verificação simples antes de pedir a URL
-    if (!doc.fileUrl) return doc;
+    const docsWithSecureLinks = await Promise.all(
+      documents.map(async (doc) => {
+        if (!doc.fileUrl) return doc
 
-    const { data } = await supabase.storage
-      .from("documents")
-      .createSignedUrl(doc.fileUrl, 3600) // 3600 segundos = 1 hora
+        const { data } = await supabase.storage
+          .from("documents")
+          .createSignedUrl(doc.fileUrl, 3600)
 
-    return {
-      ...doc,
-      fileUrl: data?.signedUrl || null,
-    }
-  })
-)
+        return { ...doc, fileUrl: data?.signedUrl || null }
+      })
+    )
 
     return NextResponse.json(docsWithSecureLinks)
   } catch (e) {
@@ -50,47 +68,87 @@ const docsWithSecureLinks = await Promise.all(
   }
 }
 
-// POST — faz upload e salva o CAMINHO do arquivo
+// ─── POST — upload com validação completa ─────────────────────────────────────
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-
-  if (!session) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 })
-  }
+  if (!session) return NextResponse.json({ error: "Não autorizado." }, { status: 401 })
 
   const companyId = (session.user as any)?.companyId
+  if (!companyId) return NextResponse.json({ error: "Empresa não encontrada." }, { status: 403 })
 
   try {
     const formData = await req.formData()
-    const file = formData.get("file") as File
-    const title = formData.get("title") as string
-    const type = formData.get("type") as string
-    const expiresAt = formData.get("expiresAt") as string
+    const file = formData.get("file") as File | null
+    const title = formData.get("title") as string | null
+    const type = formData.get("type") as string | null
+    const expiresAt = formData.get("expiresAt") as string | null
 
-    // 1. Gerar nome e caminho únicos
-    const fileExtension = file.name.split('.').pop()
-    const fileName = `${crypto.randomUUID()}.${fileExtension}`
-    const filePath = `${companyId}/${fileName}` // Pasta da empresa/UUID.pdf
+    // ─── Validações ──────────────────────────────────────────────────────────
 
-    // 2. Upload para o Supabase Storage
+    if (!file || !title || !type) {
+      return NextResponse.json({ error: "Campos obrigatórios ausentes." }, { status: 400 })
+    }
+
+    // Valida tipo do documento
+    if (!ALLOWED_DOC_TYPES.includes(type)) {
+      return NextResponse.json({ error: "Tipo de documento inválido." }, { status: 400 })
+    }
+
+    // Valida MIME type do arquivo
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: "Tipo de arquivo não permitido. Use PDF ou DOC." }, { status: 400 })
+    }
+
+    // Valida tamanho
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: "Arquivo muito grande. Máximo 20MB." }, { status: 400 })
+    }
+
+    // Valida extensão do arquivo (dupla verificação)
+    const ext = file.name.split(".").pop()?.toLowerCase()
+    if (!["pdf", "doc", "docx"].includes(ext ?? "")) {
+      return NextResponse.json({ error: "Extensão de arquivo não permitida." }, { status: 400 })
+    }
+
+    // Sanitiza inputs
+    const safeTitle = sanitize(title)
+    if (!safeTitle) {
+      return NextResponse.json({ error: "Título inválido." }, { status: 400 })
+    }
+
+    // Valida data de vencimento
+    let expiresAtDate: Date | null = null
+    if (expiresAt) {
+      expiresAtDate = new Date(expiresAt)
+      if (isNaN(expiresAtDate.getTime())) {
+        return NextResponse.json({ error: "Data de vencimento inválida." }, { status: 400 })
+      }
+    }
+
+    // ─── Upload ──────────────────────────────────────────────────────────────
+
+    const fileName = `${crypto.randomUUID()}.${ext}`
+    const filePath = `${companyId}/${fileName}`
+
     const { error: storageError } = await supabase.storage
       .from("documents")
       .upload(filePath, file)
 
     if (storageError) {
       console.error("Storage Error:", storageError)
-      return NextResponse.json({ error: "Erro no upload do arquivo" }, { status: 500 })
+      return NextResponse.json({ error: "Erro no upload do arquivo." }, { status: 500 })
     }
 
-    // 3. Salva no banco o filePath (caminho) e não a URL pública
+    // ─── Salva no banco ───────────────────────────────────────────────────────
+
     const document = await prisma.document.create({
       data: {
-        title,
+        title: safeTitle,
         type: type as any,
         status: "PENDENTE",
-        fileUrl: filePath, // IMPORTANTE: salvamos o caminho para gerar SignedURLs no GET
-        fileName: file.name,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        fileUrl: filePath,
+        fileName: sanitize(file.name),
+        expiresAt: expiresAtDate,
         companyId,
       },
     })
