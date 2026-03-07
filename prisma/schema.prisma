@@ -37,9 +37,9 @@ model Company {
   cnpj      String?  @unique
   createdAt DateTime @default(now())
 
-  users     User[]
-  documents Document[]
-  knowledge CompanyKnowledge[]
+  users        User[]
+  documents    Document[]
+  knowledge    CompanyKnowledge[]
   chatMessages ChatMessage[]
 }
 
@@ -52,7 +52,8 @@ model User {
   createdAt DateTime @default(now())
 
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id])
+  // ✅ Se empresa for deletada, usuários são removidos junto
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
 
 model Document {
@@ -62,49 +63,49 @@ model Document {
   status     DocumentStatus @default(PENDENTE)
   fileUrl    String?
   fileName   String?
-  aiAnalysis String?        // Resumo da análise da IA
+  aiAnalysis String?
   expiresAt  DateTime?
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
   companyId  String
-  company    Company        @relation(fields: [companyId], references: [id])
+  // ✅ Se empresa for deletada, documentos são removidos junto
+  company    Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  // Pedaços de texto para RAG
   chunks     DocumentChunk[]
 }
 
-// Pedaços de texto extraídos dos documentos (para RAG)
 model DocumentChunk {
   id         String   @id @default(uuid())
-  content    String   // Trecho do texto
-  embedding  String?  // Vetor em JSON (para busca semântica)
-  chunkIndex Int      // Posição no documento
+  content    String
+  embedding  String?
+  chunkIndex Int
   createdAt  DateTime @default(now())
 
   documentId String
+  // ✅ Já estava correto — chunk deletado junto com documento
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 }
 
-// Perfil acumulado da empresa — aprende com cada documento
 model CompanyKnowledge {
   id        String   @id @default(uuid())
-  category  String   // Ex: "insalubridade", "periculosidade", "setores", "nrs_aplicaveis"
-  content   String   // O conhecimento acumulado em texto
+  category  String
+  content   String
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
 
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id])
+  // ✅ Se empresa for deletada, knowledge é removido junto
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
 
-// Histórico do chat da empresa com a IA
 model ChatMessage {
   id        String   @id @default(uuid())
-  role      String   // "user" ou "assistant"
+  role      String
   content   String
   createdAt DateTime @default(now())
 
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id])
+  // ✅ Se empresa for deletada, mensagens são removidas junto
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
